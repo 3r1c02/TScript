@@ -1,16 +1,16 @@
-	#*#################
-		  Tetris
-	#################*#
+#*###################
+	Tetris
+###################*#
 
 ##############################
 # Spielervariablen
 
 var gameTickSpeed = 50; 		# Verändere die Geschwindigkeit des Spiels  		(Standard: 50) kleiner = schneller
-var gameWidth     = 400;		# Breite des Spielfensters 							(Standard: 400)
-var gameHeight	  = 800;		# Hohe des Spielfensters 							(Standard: 800)
+var gameWidth     = 400;		# Breite des Spielfensters 				(Standard: 400)
+var gameHeight	  = 800;		# Hohe des Spielfensters 				(Standard: 800)
 var h_tile_number = 10;			# Anzahl der Spielfelder auf der horizontalen Achse	(Standard: 10)
 var v_tile_number = 20;			# Anzahl der Spielfelder auf der vertikalen Achse	(Standard: 20)
-var debug         = true;      # Aktiviere den Debug-Mode
+var debug         = true;      		# Aktiviere den Debug-Mode
 
 ##############################
 
