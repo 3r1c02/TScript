@@ -1,0 +1,477 @@
+	#*#################
+		  Tetris
+	#################*#
+
+##############################
+# Spielervariablen
+
+var gameTickSpeed = 50; 		# Verändere die Geschwindigkeit des Spiels  		(Standard: 50) kleiner = schneller
+var gameWidth     = 400;		# Breite des Spielfensters 							(Standard: 400)
+var gameHeight	  = 800;		# Hohe des Spielfensters 							(Standard: 800)
+var h_tile_number = 10;			# Anzahl der Spielfelder auf der horizontalen Achse	(Standard: 10)
+var v_tile_number = 20;			# Anzahl der Spielfelder auf der vertikalen Achse	(Standard: 20)
+var debug         = true;      # Aktiviere den Debug-Mode
+
+##############################
+
+#* Ein Teil der Klasse "RTX_Graphics" geht auf die "frame.py" Bibliothek zurück, die uns Gerret (der aus dem FSR) im Vorkurs zur Verfügung gestellt hat.
+   Während wir dort in Python noch ein eigenes Fenster (mithilfe von Tkinter) erstellt haben nutzen wir hier den integrierten Canvas von TScript.     *#
+
+class RTX_Graphics {
+	# Is responsible for the visual representation of the individual tiles
+	public:
+		var rects = [];
+		var rect_color = [];
+		var canvas_size_x;
+		var canvas_size_y;
+		var unit_x;
+		var unit_y;
+		var cell_count_x;
+		var cell_count_y;
+		var event_queue = [];
+		var border;
+		var colors = {"white"  : [1,1,1],
+					  "green"  : [0,1,0],
+					  "blue"   : [0,0,1], 
+					  "red"    : [1,0,0],
+				  	  "yellow" : [1,1,0],
+					  "magenta": [1,0,1],
+					  "orange" : [1,0.5,0],
+					  "purple" : [0.5,0,1]
+					};
+		
+		# create the gamewindow
+		constructor (width=800, height=800, count_x=10, count_y=10, has_border=true) {
+			canvas_size_x = width;
+			canvas_size_y = height;
+			cell_count_x = count_x;
+			cell_count_y = count_y;
+			unit_x = (width / count_x);
+			unit_y = (height / count_y);
+			border = has_border;
+				
+			for 0:count_x do rects.push([]);
+			
+			rect_color = deepcopy(rects);
+			
+			canvas.setFillColor(0,0,0);
+			canvas.fillRect(0,0,width, height);
+			
+			for var col in 0:cell_count_x do {
+				for var row in 0:cell_count_y do {
+					var x = col * unit_x;
+					var y = row * unit_y;
+					canvas.setFillColor(colors["white"][0],colors["white"][1],colors["white"][2]);
+					canvas.setLineColor(0,0,0);
+					var ext_x = x + unit_x;
+					if has_border
+					then canvas.frameRect(x, y, unit_x, unit_y);
+					else canvas.fillRect(x, y, unit_x, unit_y);
+					rects[col].push([x, y]);
+					rect_color[col].push("white");
+				}
+			}
+			
+		}
+		
+		# check if a tile exists in the gamewindow
+		function validate_cell(x, y) {
+			if x >=0 and x < cell_count_x and y >= 0 and y < cell_count_y
+			then return;
+			
+			var message = [];
+			if x < 0 then message.push("x ist zu klein (" + x + " < 0)");
+			else if x >= cell_count_x then message.push("x ist zu groß (" + x + " > " + cell_count_x + ")");
+			if y < 0 then message.push("y ist zu klein (" + y + " < 0)");
+			else if y >= cell_count_y then message.push("y ist zu groß (" + y + " > " + cell_count_y + ")");
+			
+			error(message);
+		}
+		
+		# change the color of a specific tile
+		function set_color(x, y, color) {
+			validate_cell(x, y);
+			canvas.setFillColor(colors[color][0],colors[color][1],colors[color][2]);
+			if border
+				then canvas.frameRect(rects[x][y][0], rects[x][y][1], unit_x, unit_y);
+				else canvas.fillRect(rects[x][y][0], rects[x][y][1], unit_x, unit_y);
+			rect_color[x][y] = color;
+		}
+		
+		# reset the color of all tiles
+		function clear(color="white"){
+			for var col in 0:cell_count_x do {
+				for var row in 0:cell_count_y do {
+					canvas.setFillColor(colors[color][0],colors[color][1],colors[color][2]);					
+					if border
+						then canvas.frameRect(rects[col][row][0], rects[col][row][1], unit_x, unit_y);
+						else canvas.fillRect(rects[col][row][0], rects[col][row][1], unit_x, unit_y);
+					rect_color[col][row] = "white";
+				}
+			}
+		}
+		
+		# return the color of a specific tile (not used in this game)
+		function get_color(x, y) {
+			return rect_color[x][y];
+		}
+}
+
+var g = RTX_Graphics(gameWidth,gameHeight,h_tile_number,v_tile_number);
+
+var points = -2;						# counts the points of the player
+var death_test = 0;						# tests if the player died
+var right = false;						# if the right key is pushed
+var left = false;						# if the left key is pushed
+var rotate_clockwise = false;			# if the player wants to turn the tetromino clockwise
+var rotate_counterclockwise = false;	# if the player wants to turn the tetromino counterclockwise
+var rotation = 0;						# the rotation-state the tetromino is in
+var right_wall = false;					# is the tetromino at the right wall?
+var left_wall = false;					# is the tetromino at the left wall?
+var field_on_right = false;				# is there a already placed tetrominos on the right of the tetromino?
+var field_on_left = false;				# is there a already placed tetrominos on the left of the tetromino?
+var deny_rotation = false;				# is rotation in the current position of the tetromino possible?
+var drop = false;						# if the player wants to drop the tetromino faster
+var tick = 0;							# the initiation for the tick counter
+var reprint = false;					# should the game reprint the whole field?
+var new_rot;							# what would be the new rotation if you rotate?
+var new_obj = true;						# does a new tetromino spawn?
+var obj_nr;								# which tetromino will be spawned?
+var current_obj;						# all the coords for all the versions of the current tetromino
+var color;								# the color of the current tetromino
+
+# the colors for the tetrominos
+var colors = ["green", "red", "blue", "yellow", "orange", "purple", "magenta"];
+
+# all tetrominos with every rotation
+var obj = [
+       [
+           [[5, 0], [5, 1], [5, 2], [5, 3]],
+           [[4, 0], [5, 0], [6, 0], [7, 0]],
+           [[5, 0], [5, 1], [5, 2], [5, 3]],
+           [[3, 0], [4, 0], [5, 0], [6, 0]],
+       ],
+       [
+           [[5, 0], [6, 0], [5, 1], [6, 1]],
+           [[5, 0], [6, 0], [5, 1], [6, 1]],
+           [[5, 0], [6, 0], [5, 1], [6, 1]],
+           [[5, 0], [6, 0], [5, 1], [6, 1]],
+       ],
+       [
+           [[5, 0], [4, 1], [5, 1], [6, 1]],
+           [[5, 0], [4, 1], [4, 0], [4, -1]],
+           [[5, 0], [4, -1], [5, -1], [6, -1]],
+           [[5, 0], [6, 1], [6, 0], [6, -1]],
+       ],
+       [
+           [[5, 0], [5, 1], [5, 2], [4, 2]],
+           [[4, 0], [4, 1], [5, 1], [6, 1]],
+           [[6, 0], [5, 0], [5, 1], [5, 2]],
+           [[4, 0], [5, 0], [6, 0], [6, 1]]
+       ],
+       [
+           [[5, 0], [5, 1], [5, 2], [6, 2]],
+           [[4, 1], [4, 0], [5, 0], [6, 0]],
+           [[4, 0], [5, 0], [5, 1], [5, 2]],
+           [[4, 1], [5, 1], [6, 1], [6, 0]]
+       ],
+       [
+           [[4, 0], [5, 0], [5, 1], [6, 1]],
+           [[4, 0], [4, 1], [5, 1], [5, 2]],
+           [[4, 0], [5, 0], [5, 1], [6, 1]],
+           [[4, 0], [4, 1], [5, 1], [5, 2]]
+       ],
+       [
+           [[4, 1], [5, 1], [5, 0], [6, 0]],
+           [[5, 0], [5, 1], [4, 1], [4, 2]],
+           [[4, 1], [5, 1], [5, 0], [6, 0]],
+           [[5, 0], [5, 1], [4, 1], [4, 2]]
+       ]
+       ];
+	   
+var field = [];
+
+# create a field to save the already dropped tetrominos
+for var y in 0:g.cell_count_y do {
+	field.push([]);
+	for var x in 0:g.cell_count_x do field[y].push(null);
+}
+
+
+# start sequence
+print("Press 'space' to start game");
+function waitStart(event) {
+	if event.key == " " then print("Game starts");
+	quitEventMode();
+}
+
+function onKeyDown(event) 
+# everything that should happen if you press a key
+{
+	if (event.key == "ArrowRight" or event.key == "d" or event.key == "D") and not right_wall then right = true;
+	if (event.key == "ArrowLeft" or event.key == "a" or event.key == "A") and not left_wall then left = true;
+	if (event.key == "ArrowDown" or event.key == "s" or event.key == "S") then drop = true;
+	if (event.key == "m") then rotate_clockwise = true;
+	if (event.key == "n") then rotate_counterclockwise = true;
+	if (event.key == "Backspace") then quitEventMode();
+	if debug then {
+		if (event.key == "r") then reprint = true;
+		if (event.key == "t") then { new_obj = true; reprint = true;}
+		if (event.key == "z") then for var i in field do print(i);
+	}
+}
+
+function onTick(event)
+# everything that happens every gameTick
+{	
+	tick += 1;
+	
+	if tick % gameTickSpeed == 0 then {
+		
+		#reset tick (to prevent integer overflow)
+		tick = 0;
+
+		# spawn new object
+		if new_obj then {
+			obj_nr = Integer(math.random()*7);
+			color = colors[obj_nr];
+			current_obj = deepcopy(obj[obj_nr]);
+			if debug then print("New current_obj " + obj_nr);
+			rotation = 0;
+			points += 2;
+			new_obj = false;
+			for var tile in current_obj[rotation] do if field[tile[1]+1][tile[0]] != null then {quitEventMode(); break;}
+			for var tile in current_obj[rotation] do g.set_color(tile[0], tile[1], color);
+			left = false;
+			right = false;
+			wait(gameTickSpeed * 10);
+		}
+
+				# check if obj is at the right wall
+		for var tile in current_obj[rotation] do {
+			if tile[0] == g.cell_count_x - 1 then {
+				right_wall = true;
+				if debug then print("At right wall");
+				break;
+			}
+			else right_wall = false;
+		}
+
+		# check if obj is at the left wall
+		for var tile in current_obj[rotation] do {
+			if tile[0] == 0 then {
+				left_wall = true;
+				if debug then print("At left Wall");
+				break;
+			}
+			else left_wall = false;
+		}
+		
+		# reset field-on-side test bools
+		field_on_right = false;
+		field_on_left  = false;
+		
+		# check if already placed block is next to obj (right)
+		if not right_wall then {
+			for var tile in current_obj[rotation] do {
+				if field[tile[1] + 1][tile[0] + 1] != null then {
+						field_on_right = true;
+						if debug then print("Field on the right side of obj");
+				}
+			}
+		}
+
+		# check if already placed block is next to obj (left)
+		if not left_wall then {
+			for var tile in current_obj[rotation] do {
+				if field[tile[1] + 1][tile[0] - 1] != null then {
+						field_on_left = true;
+						if debug then print("Field on the left side of obj");
+				}
+			}
+		}
+
+
+		# clear color of the current obj
+		for var tile in current_obj[rotation] do g.set_color(tile[0], tile[1], "white");
+
+		# move obj to the right if 'Right' key was pressed
+		if right and not right_wall and not field_on_right then {
+			for var obj_all_rotations in current_obj do {
+				for var tile in obj_all_rotations do {
+					tile[0] += 1;
+					right = false;
+				}
+			}
+		}
+
+		# move obj to the left if 'Left' key was pressed
+		if left and not left_wall and not field_on_left then {
+			for var obj_all_rotations in current_obj do {
+				for var tile in obj_all_rotations do {
+					tile[0] -= 1;
+					left = false;
+				}
+			}
+		}
+
+		# rotate the obj clockwise
+		if rotate_clockwise then {
+			if rotation < 3 then new_rot = rotation + 1;
+			else new_rot = 0;
+			for var tile in current_obj[new_rot] do {
+				if tile[0] > field[0].size() - 1 or tile[0] < 0 then {
+					if debug then print("Can't rotate because of wall");
+					deny_rotation = true;
+				}
+				else if tile[1] >= field.size() - 1 then {
+					if debug then print("Can't rotate because of bottom");
+					deny_rotation = true;
+				}
+				else if field[tile[1] + 1][tile[0]] != null then {
+					if debug then print("Can't rotate because of already placed blocks");
+					deny_rotation = true;
+				}
+			}
+			if rotation < 3 and not deny_rotation then rotation += 1;
+			else if rotation == 3 and not deny_rotation then rotation = 0;
+			if debug and not deny_rotation then print("Rotated clockwise");
+			rotate_clockwise = false;
+			deny_rotation = false;
+		}
+
+		# rotate the obj counterclockwise
+		if rotate_counterclockwise then {
+			if rotation > 0 then new_rot = rotation - 1;
+			else new_rot = 3;
+			for var tile in current_obj[new_rot] do {
+				if tile[0] > field[0].size() - 1 or tile[0] < 0 then {
+					if debug then print("Can't rotate because of wall");
+					deny_rotation = true;
+				}
+				else if tile[1] >= field.size() - 1 then {
+					if debug then print("Can't rotate because of bottom");
+					deny_rotation = true;
+				}
+				else if field[tile[1] + 1][tile[0]] != null then {
+					if debug then print("Can't rotate because of already placed blocks");
+					deny_rotation = true;
+				}
+			}
+			if rotation > 0 and not deny_rotation then rotation -= 1;
+			else if rotation == 0 and not deny_rotation then rotation = 3;
+			if debug and not deny_rotation then print("Rotated counterclockwise");
+			rotate_counterclockwise = false;
+			deny_rotation = false;
+		}
+		
+		# move obj one down and color it
+		if not drop then { 
+		for var obj_all_rotations in current_obj do {
+				for var tile in obj_all_rotations do tile[1] += 1;
+			}
+			for var tile in current_obj[rotation] do g.set_color(tile[0], tile[1], color);
+		}
+	
+		# drop the obj faster if drop = True ("Down" button pressed)
+        if drop then {
+            var store_empty = 0;
+			
+            for var line in field do {
+                if line == field[0] then store_empty += 1;
+			}
+			
+            var lowest_tile = 0;
+            for var tile in current_obj[rotation] do {
+                if tile[1] > lowest_tile then lowest_tile = tile[1];
+			}
+				
+            var drop_amount = store_empty - lowest_tile - 2;
+			
+            if drop_amount > 0 then {
+                for var obj_all_rotations in current_obj do {
+                    for var tile in obj_all_rotations do tile[1] += drop_amount;
+				}
+                if debug then print("Dropped " + drop_amount);
+                for var tile in current_obj[rotation] do g.set_color(tile[0], tile[1], color);
+			}
+            else {
+                if debug then print("Can't drop");
+                for var obj_all_rotations in current_obj do {
+                    for var tile in obj_all_rotations do tile[1] += 1;
+				}
+			}
+            for var tile in current_obj[rotation] do g.set_color(tile[0], tile[1], color);
+            drop = false;
+		}
+		
+        # check if the obj is at the bottom of the field
+        for var tile in current_obj[rotation] do {
+            if tile[1] == 19 and not new_obj then {
+                new_obj = true;
+                for var inner_tile in current_obj[rotation] do field[inner_tile[1]][inner_tile[0]] = obj_nr;
+                if debug then print("Added bottom tiles to field");
+                break;
+			}
+		}
+
+		# check if the obj is on top of a previous obj
+        for var tile in current_obj[rotation] do {
+			if not new_obj then{
+				if field[tile[1] + 1][tile[0]] != null then {
+					new_obj = true;
+					for var inner_tile in current_obj[rotation] do field[inner_tile[1]][inner_tile[0]] = obj_nr;
+					if debug then print("Added bottom tiles to field");
+					break;
+				}
+			}
+		}
+		
+		
+        # remove full lines
+        for var y in 0:v_tile_number do {
+			var full_line = true;
+			for var x in 0:h_tile_number do {
+				if field[y][x] == null then full_line = false;
+			}
+			if full_line then {
+				field.remove(y);
+				if debug then print("Removed line " + y);
+				field.insert(0, []);
+				for 0:h_tile_number do field[0].push(null);
+				points += 20;
+				reprint = true;
+			}
+		}
+		
+		# reprint the already placed objs
+        if reprint then {
+            g.clear();
+            for var x in 0:field[0].size() do {
+                for var y in 0:field.size() do {
+                    if field[y][x] != null then {
+                        g.set_color(x, y, colors[field[y][x]]);
+					}
+				}
+			}
+            if debug then print("Reprinted");
+            reprint = false;
+		}
+	}
+}
+setEventHandler("canvas.keydown", waitStart); 	# press space to begin
+enterEventMode();								
+setEventHandler("canvas.keydown", onKeyDown); 	# change the function that gets invoked when a key gets pressed
+setEventHandler("timer", onTick);			  	# start the onTick function 
+enterEventMode();
+{
+	use namespace canvas;
+	setFillColor(0, 0, 0, 0.5);
+	fillRect(0,0,gameWidth, gameHeight);
+	setTextAlign("center");
+	setFont("Helvetica", gameWidth/10);
+	setFillColor(1,0,0);
+	text(gameWidth*0.5, gameHeight*0.4, "GAME OVER!\n\n" + points + " points");
+}
+print(points + " points!");
+
