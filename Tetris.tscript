@@ -10,14 +10,14 @@ var gameWidth     = 400;		# Breite des Spielfensters 				(Standard: 400)
 var gameHeight	  = 800;		# Hohe des Spielfensters 				(Standard: 800)
 var h_tile_number = 10;			# Anzahl der Spielfelder auf der horizontalen Achse	(Standard: 10)
 var v_tile_number = 20;			# Anzahl der Spielfelder auf der vertikalen Achse	(Standard: 20)
-var debug         = true;      		# Aktiviere den Debug-Mode
+var debug         = false;      	# Aktiviere den Debug-Mode
 
 ##############################
 
-#* Ein Teil der Klasse "RTX_Graphics" geht auf die "frame.py" Bibliothek zurück, die uns Gerret (der aus dem FSR) im Vorkurs zur Verfügung gestellt hat.
+#* Ein Teil der Klasse "Graphics" geht auf die "frame.py" Bibliothek zurück, die uns Gerret (der aus dem FSR) im Vorkurs zur Verfügung gestellt hat.
    Während wir dort in Python noch ein eigenes Fenster (mithilfe von Tkinter) erstellt haben nutzen wir hier den integrierten Canvas von TScript.     *#
 
-class RTX_Graphics {
+class Graphics {
 	# Is responsible for the visual representation of the individual tiles
 	public:
 		var rects = [];
@@ -31,6 +31,7 @@ class RTX_Graphics {
 		var event_queue = [];
 		var border;
 		var colors = {"white"  : [1,1,1],
+					  "black"  : [0,0,0],
 					  "green"  : [0,1,0],
 					  "blue"   : [0,0,1], 
 					  "red"    : [1,0,0],
@@ -89,7 +90,7 @@ class RTX_Graphics {
 		}
 		
 		# change the color of a specific tile
-		function set_color(x, y, color) {
+		function set_color(x, y, color="white") {
 			validate_cell(x, y);
 			canvas.setFillColor(colors[color][0],colors[color][1],colors[color][2]);
 			if border
@@ -115,30 +116,37 @@ class RTX_Graphics {
 		function get_color(x, y) {
 			return rect_color[x][y];
 		}
+		
+		# draw a 'X' in a cell
+		function draw_x(x, y, margin="0", color="black") {
+			canvas.setFillColor(colors[color][0],colors[color][1],colors[color][2]);
+			canvas.line(rects[x][y][0] + margin, rects[x][y][1] + margin, rects[x][y][0] + unit_x - margin, rects[x][y][1] + unit_y - margin);
+			canvas.line(rects[x][y][0] + unit_x - margin, rects[x][y][1] + margin, rects[x][y][0] + margin, rects[x][y][1] + unit_y - margin);
+		}
 }
 
-var g = RTX_Graphics(gameWidth,gameHeight,h_tile_number,v_tile_number);
+var g = Graphics(gameWidth,gameHeight,h_tile_number,v_tile_number);
 
-var points = -2;						# counts the points of the player
-var death_test = 0;						# tests if the player died
-var right = false;						# if the right key is pushed
-var left = false;						# if the left key is pushed
-var rotate_clockwise = false;			# if the player wants to turn the tetromino clockwise
-var rotate_counterclockwise = false;	# if the player wants to turn the tetromino counterclockwise
-var rotation = 0;						# the rotation-state the tetromino is in
+var points = -2;					# counts the points of the player
+var death_test = 0;					# tests if the player died
+var right = false;					# if the right key is pushed
+var left = false;					# if the left key is pushed
+var rotate_clockwise = false;				# if the player wants to turn the tetromino clockwise
+var rotate_counterclockwise = false;			# if the player wants to turn the tetromino counterclockwise
+var rotation = 0;					# the rotation-state the tetromino is in
 var right_wall = false;					# is the tetromino at the right wall?
 var left_wall = false;					# is the tetromino at the left wall?
 var field_on_right = false;				# is there a already placed tetrominos on the right of the tetromino?
 var field_on_left = false;				# is there a already placed tetrominos on the left of the tetromino?
 var deny_rotation = false;				# is rotation in the current position of the tetromino possible?
-var drop = false;						# if the player wants to drop the tetromino faster
-var tick = 0;							# the initiation for the tick counter
+var drop = false;					# if the player wants to drop the tetromino faster
+var tick = 0;						# the initiation for the tick counter
 var reprint = false;					# should the game reprint the whole field?
-var new_rot;							# what would be the new rotation if you rotate?
-var new_obj = true;						# does a new tetromino spawn?
-var obj_nr;								# which tetromino will be spawned?
-var current_obj;						# all the coords for all the versions of the current tetromino
-var color;								# the color of the current tetromino
+var new_rot;						# what would be the new rotation if you rotate?
+var new_obj = true;					# does a new tetromino spawn?
+var obj_nr;						# which tetromino will be spawned?
+var current_obj;					# all the coords for all the versions of the current tetromino
+var color;						# the color of the current tetromino
 
 # the colors for the tetrominos
 var colors = ["green", "red", "blue", "yellow", "orange", "purple", "magenta"];
@@ -435,6 +443,8 @@ function onTick(event)
 				if field[y][x] == null then full_line = false;
 			}
 			if full_line then {
+				for var x in 0:h_tile_number do g.draw_x(x,y,5);
+				wait(100);
 				field.remove(y);
 				if debug then print("Removed line " + y);
 				field.insert(0, []);
@@ -474,4 +484,3 @@ enterEventMode();
 	text(gameWidth*0.5, gameHeight*0.4, "GAME OVER!\n\n" + points + " points");
 }
 print(points + " points!");
-
