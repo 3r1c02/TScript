@@ -127,6 +127,9 @@ function newCherry() {
 	cherry = [];
 	cherry.push(Integer(rects_x * math.random()));
 	cherry.push(Integer(rects_y * math.random()));
+	for var i in snake do {
+		if i == cherry then newCherry();
+	}
 	g.set_color(cherry[0],cherry[1], "red");
 	newC = false;
 }
